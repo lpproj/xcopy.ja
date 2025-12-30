@@ -1,0 +1,3 @@
+#
+doc/*ja.txt working-tree-encoding=CP932 text eol=crlf
+nls/*.ja working-tree-encoding=CP932 text eol=auto
