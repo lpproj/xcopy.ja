@@ -392,23 +392,48 @@ char *strmcat(char *dest,
 /*-------------------------------------------------------------------------*/
 int strtodate(const char *string,
               THEDATE *dt) {
+  static int date_format = -1;
   char *ptr;
+  int p0, p1, p2;
 
+  if (date_format < 0) {
+    unsigned char cinfo[34];
+    union REGS r;
+    struct SREGS sr;
+    cinfo[0] = 0; /* to be safe */
+    r.x.ax = 0x3800;
+    r.x.dx = FP_OFF(cinfo);
+    sr.ds = FP_SEG(cinfo);
+    intdosx(&r, &r, &sr);
+    date_format = cinfo[0];
+  }
   ptr = (char *)string;
   if(isdigit(*ptr)) {
-    dt->da_mon = atoi(ptr);
+    dt->da_mon = p0 = atoi(ptr);
     while (isdigit(*ptr)) ++ptr;
     if ((*ptr != '/') && (*ptr != '-')) {
       return -1;
     }
     ptr++;
-    dt->da_day = atoi(ptr);
+    dt->da_day = p1 = atoi(ptr);
     while (isdigit(*ptr)) ++ptr;
     if((*ptr != '/') && (*ptr != '-')) {
       return -1;
     }
     ptr++;
-    dt->da_year = atoi(ptr);
+    dt->da_year = p2 = atoi(ptr);
+  }
+  switch(date_format) {
+    case 1:
+      dt->da_day = p0;
+      dt->da_mon = p1;
+      dt->da_year = p2;
+      break;
+    case 2:
+      dt->da_year = p0;
+      dt->da_mon = p1;
+      dt->da_day = p2;
+      break;
   }
 
   if (dt->da_year < 80) {

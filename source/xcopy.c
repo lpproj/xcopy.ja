@@ -34,6 +34,22 @@
 #include <dos.h>	/* also has the date / time struct definitions */
 #include <sys/stat.h>
 
+#if defined(_MBCS)
+#include <mbstring.h>
+#undef strchr
+#undef strrchr
+#undef strpbrk
+#undef strupr
+#undef strcmp
+#undef stricmp
+#define strchr(s,c) (char *)_mbschr((const unsigned char *)(s),(unsigned)(c))
+#define strrchr(s,c) (char *)_mbsrchr((const unsigned char *)(s),(unsigned)(c))
+#define strpbrk(s1,s2) (char *)_mbspbrk((const unsigned char *)(s1),(const unsigned char *)(s2))
+#define strupr(s) _mbsupr((unsigned char *)(s))
+#define strcmp(s1,s2) _mbscmp((const unsigned char *)(s1),(const unsigned char *)(s2))
+#define stricmp(s1,s2) _mbsicmp((const unsigned char *)(s1),(const unsigned char *)(s2))
+#endif
+
 #include "kitten.h"     /* Kitten message library */
 			/* or use the older catgets.h */
 nl_catd cat;            /* message catalog, must be before shared.inc */
@@ -155,6 +171,9 @@ int main(int argc, const char **argv) {
   THEDATE dt;
   THETIME tm;
 
+#if defined(HAVE_KITTEN_SETPROGNAME)
+  kitten_setprogname (argv[0]);
+#endif
   cat = catopen ("xcopy", 0);	/* initialize kitten */
 
   classify_args(argc, argv, &fileargc, fileargv, &switchargc, switchargv);
@@ -314,7 +333,11 @@ int main(int argc, const char **argv) {
       exit(4);
     }
     /* check destination path */
+#if defined(_MBCS)
+    if ((length == 0 || (char)*_mbsdec(fileargv[1], fileargv[1] + length) != *DIR_SEPARATOR) &&
+#else
     if (fileargv[1][length - 1] != *DIR_SEPARATOR &&
+#endif
         !dir_exists(dest_pathname)) {
       ptr = strrchr(dest_pathname, *DIR_SEPARATOR);
       ptr++;

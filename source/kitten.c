@@ -25,11 +25,25 @@
 #include <fcntl.h>
 #include <dos.h>
 
+#if defined(_MBCS)
+#include <mbstring.h>
+#undef strchr
+#undef strrchr
+#undef strpbrk
+#define strchr(s,c) (char *)_mbschr((const unsigned char *)(s),(unsigned)(c))
+#define strrchr(s,c) (char *)_mbsrchr((const unsigned char *)(s),(unsigned)(c))
+#define strpbrk(s1,s2) (char *)_mbspbrk((const unsigned char *)(s1),(const unsigned char *)(s2))
+#endif
+
 /* assert we are running in small model */
 /* else pointer below has to be done correctly */
 /* char verify_small_pointers[sizeof(void*) == 2 ? 1 : -1]; */
 
 #include "kitten.h"
+
+#define _id_to_str2(s) #s
+#define id_to_str(s) _id_to_str2(s)
+static char *kitten_progname = NULL;
 
 char catcontents[8192];
 
@@ -121,6 +135,20 @@ void dos_close(int file)
 }
 
 
+/* Local funition(s) for DBCS/MBCS */
+
+#if defined(_MBCS)
+static int _mbclen_s(const char *str)
+{
+  int n = (int)_mbclen((unsigned char *)str);
+  if (n <= 0 || (n > 1 && str[1] == '\0')) n = 1;   /* avoid buffer overrun */
+  return n;
+}
+#else
+#define _mbclen_s(s) (1)
+#endif
+
+
 /* Functions */
 
 /**
@@ -189,13 +217,17 @@ nl_catd kittenopen(char *name)
   lang = getenv ("LANG");
 
   if (lang == NULL) {
+#if defined(DEF_LANG)
+      lang = id_to_str(DEF_LANG);
+#else
       /* printf("no lang= found\n"); */ /* not fatal, though */
       /* Return failure - we won't be able to locate the cat file */
       return (-1);
+#endif
   }
 
   if ( ( strlen(lang) < 2 ) ||
-       ( (strlen(lang) > 2) && (lang[2] != '-') ) ) {
+       ( (strlen(lang) > 2) && (lang[2] != '-') && (lang[2] != '_') ) ) {
       /* Return failure - we won't be able to locate the cat file */
       return (-1);
   }
@@ -203,6 +235,16 @@ nl_catd kittenopen(char *name)
   memcpy(catlang, lang, 2);
   /* we copy the full LANG value or the part before "-" if "-" found */
   catlang[2] = '\0';
+
+  if (kitten_progname != NULL) {
+    /* prog_path_name_without_ext.%LANG% */
+   strcpy(catfile, kitten_progname);
+    strcat(catfile, ".");
+    strcat(catfile, catlang);
+    _kitten_catalog = catread (catfile);
+    if (_kitten_catalog)
+      return (_kitten_catalog);
+  }
 
   /* step through NLSPATH */
 
@@ -421,10 +463,9 @@ char *processEscChars(char *line)
   /* cycle through copying characters, except when a \ is encountered. */
   while (*src != '\0') {
     ch = *src;
-    src++;
     
     if (ch == '\\') {
-      ch = *src; /* what follows slash? */
+      ch = *++src; /* what follows slash? */
       src++;
 
       switch (ch) {
@@ -492,8 +533,17 @@ char *processEscChars(char *line)
     } /* if backslash */
       else
     {
+#if defined(_MBCS)
+      int nch = _mbclen_s(src);
+      if (nch > 0)
+        memcpy(dst, src, nch);
+      src += nch;
+      dst += nch;
+#else
+      src++;
       *dst = ch;
       dst++;
+#endif
     }
   } /* while */
 
@@ -569,5 +619,31 @@ int get_line (int file, char *str, int size)
 
   return success;
 
+}
+
+
+/*
+ * extra
+ */
+void kitten_setprogname(const char *pathname)
+{
+  if (kitten_progname != NULL) {
+    free(kitten_progname);
+    kitten_progname = NULL;
+  }
+  if (pathname == NULL || *pathname == '\0')
+    return;
+
+  kitten_progname = strdup(pathname);
+  if (kitten_progname) {
+    char *n, *p;
+    for (n = kitten_progname; (p = strpbrk(n, ":/\\")) != NULL;) {
+       n = p + 1;
+    }
+    p = strrchr(n, '.');
+    if (p != NULL) {
+      *p = '\0'; /* remove ".ext" */
+    }
+  }
 }
 

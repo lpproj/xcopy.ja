@@ -56,6 +56,10 @@ int dos_write(int file, void *ptr, unsigned count);
 void dos_close(int file);
 #define close(file) dos_close(file)
 
+/* extra */
+void kitten_setprogname(const char *pathname);
+#define HAVE_KITTEN_SETPROGNAME 1
+
 #ifdef __cplusplus
 }
 #endif
